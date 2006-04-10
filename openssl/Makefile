@@ -1,4 +1,4 @@
-# Makefile for perl
+# Makefile for openssl
 #
 # Copyright (C) 2004 Richard Kojedzinszky <krichy@tvnetwork.hu>
 # All rights reserved.
