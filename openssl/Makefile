@@ -25,10 +25,11 @@ CFLINUX_ROOT = ../../cflinux
 
 all:
 
-include $(CFLINUX_ROOT)/cfpkg.mk
-
 PKG_ROOT := $(CFLINUX_ROOT)/build/openssl
+PKG_INSTALL_DIR := $(PKG_ROOT)/_install
 BUILT_STAMP := $(PKG_ROOT)/apps/.openssl.built
+
+include $(CFLINUX_ROOT)/cfpkg.mk
 
 configure:
 
