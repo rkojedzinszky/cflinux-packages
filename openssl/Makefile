@@ -44,4 +44,6 @@ install: build $(PKG_INSTALL_DIR)
 	-mkdir -p $(PKG_INSTALL_DIR)/usr/local/bin
 	$(INSTALL_BIN) $(PKG_ROOT)/apps/openssl $(PKG_INSTALL_DIR)/usr/local/bin/
 
+permissions: defaultperms
+
 .PHONY: configure clean build install

@@ -55,4 +55,6 @@ install: build
 	$(MAKE) -C $(PKG_ROOT) pure_site_install DESTDIR=$(PKG_INSTALL_DIR) $(PERL_ENV)
 	rm -rf $(PKG_INSTALL_DIR)/usr/local/man
 
+permissions: defaultperms
+
 .PHONY: configure clean build install

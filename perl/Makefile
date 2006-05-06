@@ -66,4 +66,6 @@ install: build $(PKG_INSTALL_DIR)
 	$(MAKE) -C $(PKG_ROOT) \
 		install.perl STRIPFLAGS=-s DESTDIR=$(PKG_INSTALL_DIR)
 
+permissions: defaultperms
+
 .PHONY: configure clean build install
