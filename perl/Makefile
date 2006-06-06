@@ -62,10 +62,13 @@ $(BUILT_STAMP):
 	$(MAKE) -C $(PKG_ROOT) all $(UC_PATH)
 	touch $(BUILT_STAMP)
 
-install: build $(PKG_INSTALL_DIR)
+install: build check $(PKG_INSTALL_DIR)
 	$(MAKE) -C $(PKG_ROOT) \
 		install.perl STRIPFLAGS=-s DESTDIR=$(PKG_INSTALL_DIR)
 
 permissions: defaultperms
+
+check:
+	$(MAKE) -C $(PKG_ROOT) check $(UC_PATH)
 
 .PHONY: configure clean build install
