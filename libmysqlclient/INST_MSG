@@ -1,0 +1,2 @@
+libmysqlclient (version 4.0.27) has been installed on your system.
+To make it work, ensure that /usr/local/lib is included in /etc/ld.so.conf.
