@@ -22,7 +22,7 @@ PKG_VERSION := 1.49
 PKG_VERSION_SUFF :=
 SRC_FILENAME = DBD-Pg-$(PKG_VERSION).tar.gz
 EXTRACTED_DIR = DBD-Pg-$(PKG_VERSION)
-DEPENDS := perl
+DEPENDS := perl-dbi
 DOWNLOAD_SITES = \
 	http://search.cpan.org/CPAN/authors/id/D/DB/DBDPG
 
