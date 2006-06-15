@@ -48,7 +48,7 @@ $(CONFIGURED_STAMP): patch
 		$(PERL_SRC)/perl Makefile.PL \
 		PERL_SRC=$(PERL_SRC) \
 		--cflags=-I$(MYSQL_DIR)/include \
-		--libs=-L$(MYSQL_DIR)/libmysql/.libs \
+		--libs="-L$(MYSQL_DIR)/libmysql/.libs -lmysqlclient" \
 		--mysql_config=/bin/false
 	touch $@
 
