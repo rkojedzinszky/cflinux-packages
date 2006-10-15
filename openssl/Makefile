@@ -18,7 +18,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 PKG := openssl
-PKG_VERSION := 0.9.7i
+PKG_VERSION := 0.9.7l
 
 # where a compiled cflinux resides
 CFLINUX_ROOT = ../../cflinux
