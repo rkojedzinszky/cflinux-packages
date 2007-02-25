@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if ! [ -f /usr/local/etc/bind/rndc.key ] ; then
+	rndc-confgen -a
+	chmod 640 /usr/local/etc/bind/rndc.key
+fi
+
+chown -R root:bind /usr/local/etc/bind
+chmod 750 /usr/local/etc/bind
+

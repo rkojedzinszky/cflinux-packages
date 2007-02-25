@@ -1,0 +1,5 @@
+
+You have installed bind. To let it start up automatically add
+bind_enable="YES" to /etc/rc.conf. Optionally, you can alter
+the default flags passed to named by setting bind_flags there.
+

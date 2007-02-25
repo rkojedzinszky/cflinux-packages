@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if ! grep -q "^bind:" /etc/passwd ; then
+	echo "Before installing bind, please create a 'bind' user for the daemon"
+	echo "and be sure to save changes using savedata. You may use the following command:"
+	echo "$ adduser -DH -h /nonexistent -g \"Bind daemon\" bind ; savedata"
+	exit 1
+fi
