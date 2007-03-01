@@ -45,6 +45,7 @@ $(CONFIGURED_STAMP):
 		--enable-shared \
 		--disable-static \
 		--with-libtool \
+		--enable-threads \
 		--with-openssl=$(UC_ROOT)
 	touch $(CONFIGURED_STAMP)
 
