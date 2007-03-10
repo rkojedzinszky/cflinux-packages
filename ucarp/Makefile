@@ -19,7 +19,7 @@
 
 PKG := ucarp
 PKG_VERSION := 1.2
-PKG_VERSION_SUFF :=
+PKG_VERSION_SUFF := -p1
 SRC_FILENAME = $(PKG)-$(PKG_VERSION).tar.bz2
 EXTRACTED_DIR = $(PKG)-$(PKG_VERSION)
 DOWNLOAD_SITES = http://download.pureftpd.org/pub/ucarp

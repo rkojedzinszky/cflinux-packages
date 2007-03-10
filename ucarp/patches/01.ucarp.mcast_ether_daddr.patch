@@ -1,0 +1,243 @@
+diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
+--- ucarp-1.2.orig/configure	2006-02-25 17:32:42.000000000 +0100
++++ ucarp-1.2/configure	2007-03-10 15:10:20.000000000 +0100
+@@ -9231,7 +9231,6 @@
+   echo $ECHO_N "(cached) $ECHO_C" >&6
+ else
+   ac_check_lib_save_LIBS=$LIBS
+-LIBS="-lpcap  $LIBS"
+ cat >conftest.$ac_ext <<_ACEOF
+ /* confdefs.h.  */
+ _ACEOF
+@@ -9294,7 +9293,6 @@
+ #define HAVE_LIBPCAP 1
+ _ACEOF
+ 
+-  LIBS="-lpcap $LIBS"
+ 
+ fi
+ 
+diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
+--- ucarp-1.2.orig/src/carp.c	2006-02-19 00:06:17.000000000 +0100
++++ ucarp-1.2/src/carp.c	2007-03-10 15:13:07.000000000 +0100
+@@ -172,6 +172,16 @@
+     return 0;
+ }
+ 
++static inline void make_mcast_ether_from_ipv4(struct in_addr addr, unsigned char *ether)
++{
++	ether[0] = 0x01;
++	ether[1] = 0x00;
++	ether[2] = 0x5e;
++	ether[3] = (ntohl(addr.s_addr) & 0x007f0000) >> 16;
++	ether[4] = (ntohl(addr.s_addr) & 0x0000ff00) >> 8;
++	ether[5] = (ntohl(addr.s_addr) & 0x000000ff);
++}
++
+ static void carp_send_ad(struct carp_softc *sc)
+ {
+     struct carp_header ch;
+@@ -243,12 +253,7 @@
+     eh.ether_shost[4] = 0x00;
+     eh.ether_shost[5] = vhid;
+     
+-    eh.ether_dhost[0] = 0xff;
+-    eh.ether_dhost[1] = 0xff;
+-    eh.ether_dhost[2] = 0xff;
+-    eh.ether_dhost[3] = 0xff;
+-    eh.ether_dhost[4] = 0xff;
+-    eh.ether_dhost[5] = 0xff;        
++    make_mcast_ether_from_ipv4(ip.ip_dst, eh.ether_dhost);
+     
+     eh.ether_type = htons(ETHERTYPE_IP);    
+     
+@@ -384,43 +389,23 @@
+     }    
+ }
+ 
+-static void packethandler(unsigned char *dummy,
+-                          const struct pcap_pkthdr *header,
+-                          const unsigned char *sp)
++static void packethandler(int fd)
+ {
+-    struct ether_header etherhead;
+     struct ip iphead;
+     unsigned int source;
+     unsigned int dest;
+     unsigned char proto;
+     unsigned int caplen;
+     unsigned int ip_len;
+-            
+-    (void) dummy;
+-    if (header->caplen <= (sizeof etherhead + sizeof iphead)) {
+-        return;
+-    }    
+-    memcpy(&etherhead, sp, sizeof etherhead);
+-#ifdef DEBUG
+-    logfile(LOG_DEBUG, "Ethernet "
+-             "[%02x:%02x:%02x:%02x:%02x:%02x]->[%02x:%02x:%02x:%02x:%02x:%02x] "
+-             "type [%04x]",
+-            (unsigned int) etherhead.ether_shost[0],
+-            (unsigned int) etherhead.ether_shost[1],
+-            (unsigned int) etherhead.ether_shost[2],
+-            (unsigned int) etherhead.ether_shost[3],
+-            (unsigned int) etherhead.ether_shost[4],
+-            (unsigned int) etherhead.ether_shost[5],
+-            (unsigned int) etherhead.ether_dhost[0],
+-            (unsigned int) etherhead.ether_dhost[1],
+-            (unsigned int) etherhead.ether_dhost[2],
+-            (unsigned int) etherhead.ether_dhost[3],
+-            (unsigned int) etherhead.ether_dhost[4],
+-            (unsigned int) etherhead.ether_dhost[5],
+-            (unsigned int) ntohs(etherhead.ether_type));
+-#endif
+-    sp += sizeof etherhead;
+-    caplen = header->caplen - sizeof etherhead;
++    char buf[1500];
++    unsigned char *sp = buf;
++
++    if ((caplen = recv(fd, buf, sizeof(buf), 0)) < 0)
++	    return;
++
++    if (caplen < sizeof(iphead))
++	    return;
++
+     memcpy(&iphead, sp, sizeof iphead);    
+     if (iphead.ip_src.s_addr == srcip.s_addr) {
+ 	return;
+@@ -635,10 +620,11 @@
+ 
+ int docarp(void)
+ {
+-    struct bpf_program bpfp;
+     struct pollfd pfds[1];
+     int nfds;
+-    char errbuf[PCAP_ERRBUF_SIZE];
++    struct ifreq ifr;
++    int mcast_fd;
++    struct ip_mreqn mreq;
+ 
+     sc.sc_vhid = vhid;
+     sc.sc_advbase = advbase;
+@@ -674,23 +660,42 @@
+             (unsigned int) hwaddr[0], (unsigned int) hwaddr[1],
+             (unsigned int) hwaddr[2], (unsigned int) hwaddr[3],
+             (unsigned int) hwaddr[4], (unsigned int) hwaddr[5]);
+-    if ((dev_desc = pcap_open_live(interface, ETHERNET_MTU, 0,
+-                                   CAPTURE_TIMEOUT, errbuf)) == NULL) {
+-        logfile(LOG_ERR, _("Unable to open interface [%s]: %s"),
+-                interface, errbuf);
+-        return -1;
+-    }    
+-    if (pcap_compile(dev_desc, &bpfp, build_bpf_rule(),
+-                     1, (bpf_u_int32) 0) != 0) {
+-        logfile(LOG_ERR, _("Unable to compile pcap rule: %s [%s]"),
+-                errbuf, interface);
+-        return -1;
++    if ((dev_desc_fd = socket(PF_PACKET, SOCK_RAW, 0)) == -1) {
++	    logfile(LOG_ERR, _("socket() error"));
++	    return -1;
++    }
++    {
++	    struct sockaddr_ll sa;
++	    strncpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
++
++	    if (ioctl(dev_desc_fd, SIOCGIFINDEX, &ifr) == -1) {
++		    logfile(LOG_ERR, _("ioctl() error"));
++		    return -1;
++	    }
++
++	    memset(&sa, 0, sizeof(sa));
++
++	    sa.sll_family = AF_PACKET;
++	    sa.sll_ifindex = ifr.ifr_ifindex;
++
++	    if (bind(dev_desc_fd, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
++		    logfile(LOG_ERR, _("bind() error"));
++		    return -1;
++	    }
++    }
++
++    mcast_fd = socket(PF_INET, SOCK_RAW, IPPROTO_VRRP);
++    mreq.imr_multiaddr.s_addr = INADDR_CARP_GROUP;
++    mreq.imr_address.s_addr = INADDR_ANY;
++    mreq.imr_ifindex = ifr.ifr_ifindex;
++    if (setsockopt(mcast_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == -1) {
++	    logfile(LOG_ERR, _("setsockopt() error"));
++	    return -1;
+     }
+-    pcap_setfilter(dev_desc, &bpfp);
+-    dev_desc_fd = pcap_fileno(dev_desc);
+-    pfds[0].fd = dev_desc_fd;
+-    pfds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
+     
++    pfds[0].fd = mcast_fd;
++    pfds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
++
+     if (shutdown_at_exit != 0) {
+         (void) signal(SIGINT, sighandler_exit);
+         (void) signal(SIGQUIT, sighandler_exit);
+@@ -718,7 +723,7 @@
+             continue;
+         }        
+         if (nfds == 1) {
+-            pcap_dispatch(dev_desc, 1, packethandler, NULL);
++		packethandler(mcast_fd);
+         }
+         if (sc.sc_md_tmo.tv_sec != 0 && timercmp(&now, &sc.sc_md_tmo, >)) {
+             carp_master_down(&sc);
+@@ -732,8 +737,6 @@
+             carp_send_ad(&sc);
+         }
+     }
+-    pcap_close(dev_desc);
+-    pcap_freecode(&bpfp);
+     
+     return 0;
+ }
+diff -ruNP ucarp-1.2.orig/src/carp_p.h ucarp-1.2/src/carp_p.h
+--- ucarp-1.2.orig/src/carp_p.h	2004-06-20 11:24:05.000000000 +0200
++++ ucarp-1.2/src/carp_p.h	2007-03-10 15:12:32.000000000 +0100
+@@ -3,7 +3,7 @@
+ 
+ static struct carp_softc sc;
+ static struct timeval now;
+-static pcap_t *dev_desc;
++//static pcap_t *dev_desc;
+ static int dev_desc_fd = -1;
+ static int carp_suppress_preempt;
+ 
+diff -ruNP ucarp-1.2.orig/src/ucarp.c ucarp-1.2/src/ucarp.c
+--- ucarp-1.2.orig/src/ucarp.c	2006-02-21 00:06:08.000000000 +0100
++++ ucarp-1.2/src/ucarp.c	2007-03-10 15:11:59.000000000 +0100
+@@ -202,12 +202,8 @@
+     }
+ #endif    
+     if (interface == NULL || *interface == 0) {        
+-        interface = pcap_lookupdev(NULL);
+-        if (interface == NULL || *interface == 0) {
+-            logfile(LOG_ERR, _("You must supply a network interface"));
+-            return 1;
+-        }
+-        logfile(LOG_INFO, _("Using [%s] as a network interface"), interface);
++        logfile(LOG_ERR, _("You must supply a network interface"));
++        return 1;
+     }
+     if (vhid == 0) {
+         logfile(LOG_ERR, _("You must supply a valid virtual host id"));
+--- ucarp-1.2.orig/src/ucarp.h	2004-08-28 18:10:28.000000000 +0200
++++ ucarp-1.2/src/ucarp.h	2007-03-10 15:35:12.000000000 +0100
+@@ -60,7 +60,12 @@
+ #include <netinet/if_ether.h>
+ #include <netinet/ip.h>
+ #include <poll.h>
+-#include <pcap.h>
++//#include <pcap.h>
++#include <netpacket/packet.h>
++
++#ifndef IPPROTO_VRRP
++#define IPPROTO_VRRP 112
++#endif
+ 
+ #ifdef __sun__
+ # define u_int8_t uint8_t
