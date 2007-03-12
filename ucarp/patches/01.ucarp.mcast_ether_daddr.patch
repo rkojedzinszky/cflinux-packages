@@ -17,10 +17,32 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
  
  fi
  
-diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
 --- ucarp-1.2.orig/src/carp.c	2006-02-19 00:06:17.000000000 +0100
-+++ ucarp-1.2/src/carp.c	2007-03-10 15:13:07.000000000 +0100
-@@ -172,6 +172,16 @@
++++ ucarp-1.2/src/carp.c	2007-03-12 23:30:23.000000000 +0100
+@@ -48,6 +48,22 @@
+ # include <dmalloc.h>
+ #endif
+ 
++static inline void tv_fix_usec_overrun(struct timeval *tv)
++{
++	while (tv->tv_usec >= 1000000) {
++		tv->tv_usec-=1000000;
++		tv->tv_sec++;
++	}
++}
++
++static inline void tv_fix_usec_underrun(struct timeval *tv)
++{
++	while (tv->tv_usec < 0) {
++		tv->tv_usec+=1000000;
++		tv->tv_sec--;
++	}
++}
++
+ static void carp_set_state(struct carp_softc *sc, int state)
+ {
+     if ((int) sc->sc_state == state) {
+@@ -172,6 +188,16 @@
      return 0;
  }
  
@@ -37,7 +59,15 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
  static void carp_send_ad(struct carp_softc *sc)
  {
      struct carp_header ch;
-@@ -243,12 +253,7 @@
+@@ -214,6 +240,7 @@
+         logfile(LOG_ERR, _("Out of memory to create packet"));
+         sc->sc_ad_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+         sc->sc_ad_tmo.tv_usec = now.tv_usec + tv.tv_usec;            
++	tv_fix_usec_overrun(&sc->sc_ad_tmo);
+         return;
+     }
+     ip.ip_v = IPVERSION;
+@@ -243,12 +270,7 @@
      eh.ether_shost[4] = 0x00;
      eh.ether_shost[5] = vhid;
      
@@ -51,7 +81,47 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
      
      eh.ether_type = htons(ETHERTYPE_IP);    
      
-@@ -384,43 +389,23 @@
+@@ -298,6 +320,7 @@
+     if (advbase != 255 || advskew != 255) {
+         sc->sc_ad_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+         sc->sc_ad_tmo.tv_usec = now.tv_usec + tv.tv_usec;            
++	tv_fix_usec_overrun(&sc->sc_ad_tmo);
+         /* IPv6 ? */        
+     }
+ }
+@@ -332,19 +355,23 @@
+         case AF_INET:
+             sc->sc_md_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+             sc->sc_md_tmo.tv_usec = now.tv_usec + tv.tv_usec;            
++	    tv_fix_usec_overrun(&sc->sc_md_tmo);
+             break;
+ #ifdef INET6
+         case AF_INET6:
+             sc->sc_md6_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+             sc->sc_md6_tmo.tv_usec = now.tv_usec + tv.tv_usec;            
++	    tv_fix_usec_overrun(&sc->sc_md6_tmo);
+             break;
+ #endif /* INET6 */
+         default:
+             sc->sc_md_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+             sc->sc_md_tmo.tv_usec = now.tv_usec + tv.tv_usec;
++	    tv_fix_usec_overrun(&sc->sc_md_tmo);
+ #ifdef INET6
+             sc->sc_md6_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+             sc->sc_md6_tmo.tv_usec = now.tv_usec + tv.tv_usec;
++	    tv_fix_usec_overrun(&sc->sc_md6_tmo);
+ #endif
+             break;
+         }        
+@@ -354,6 +381,7 @@
+         tv.tv_usec = (unsigned int) (sc->sc_advskew * 1000000ULL / 256ULL);
+         sc->sc_md_tmo.tv_sec = now.tv_sec + tv.tv_sec;
+         sc->sc_md_tmo.tv_usec = now.tv_usec + tv.tv_usec;
++	tv_fix_usec_overrun(&sc->sc_md_tmo);
+         /* No IPv6 scheduling ? */
+         break;
+     }
+@@ -384,43 +412,23 @@
      }    
  }
  
@@ -96,7 +166,7 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
 +    char buf[1500];
 +    unsigned char *sp = buf;
 +
-+    if ((caplen = recv(fd, buf, sizeof(buf), 0)) < 0)
++    if ((int)(caplen = recv(fd, buf, sizeof(buf), 0)) < 0)
 +	    return;
 +
 +    if (caplen < sizeof(iphead))
@@ -105,12 +175,13 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
      memcpy(&iphead, sp, sizeof iphead);    
      if (iphead.ip_src.s_addr == srcip.s_addr) {
  	return;
-@@ -635,10 +620,11 @@
+@@ -635,10 +643,12 @@
  
  int docarp(void)
  {
 -    struct bpf_program bpfp;
      struct pollfd pfds[1];
++    fd_set fds, rfds;
      int nfds;
 -    char errbuf[PCAP_ERRBUF_SIZE];
 +    struct ifreq ifr;
@@ -119,7 +190,7 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
  
      sc.sc_vhid = vhid;
      sc.sc_advbase = advbase;
-@@ -674,23 +660,42 @@
+@@ -674,23 +684,45 @@
              (unsigned int) hwaddr[0], (unsigned int) hwaddr[1],
              (unsigned int) hwaddr[2], (unsigned int) hwaddr[3],
              (unsigned int) hwaddr[4], (unsigned int) hwaddr[5]);
@@ -171,24 +242,85 @@ diff -ruNP ucarp-1.2.orig/src/carp.c ucarp-1.2/src/carp.c
 -    pfds[0].fd = dev_desc_fd;
 -    pfds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
      
++    FD_ZERO(&rfds);
++    FD_SET(mcast_fd, &rfds);
++
 +    pfds[0].fd = mcast_fd;
 +    pfds[0].events = POLLIN | POLLERR | POLLHUP | POLLNVAL;
 +
      if (shutdown_at_exit != 0) {
          (void) signal(SIGINT, sighandler_exit);
          (void) signal(SIGQUIT, sighandler_exit);
-@@ -718,7 +723,7 @@
-             continue;
-         }        
-         if (nfds == 1) {
+@@ -704,36 +736,46 @@
+     carp_setrun(&sc, 0); 
+     
+     for (;;) {
+-        nfds = poll(pfds, (nfds_t) 1, sc.sc_advbase * 1000);
+-        if (nfds == -1 || 
+-            (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+-#ifdef DEBUG
+-            logfile(LOG_NOTICE, "poll() error");
+-#endif
+-            break;
+-        }
+-        if (gettimeofday(&now, NULL) != 0) {
+-            logfile(LOG_WARNING, "gettimeofday() failed: %s",
+-                    strerror(errno));
+-            continue;
+-        }        
+-        if (nfds == 1) {
 -            pcap_dispatch(dev_desc, 1, packethandler, NULL);
-+		packethandler(mcast_fd);
-         }
-         if (sc.sc_md_tmo.tv_sec != 0 && timercmp(&now, &sc.sc_md_tmo, >)) {
-             carp_master_down(&sc);
-@@ -732,8 +737,6 @@
-             carp_send_ad(&sc);
-         }
+-        }
+-        if (sc.sc_md_tmo.tv_sec != 0 && timercmp(&now, &sc.sc_md_tmo, >)) {
+-            carp_master_down(&sc);
+-        }
+-#ifdef INET6
+-        if (sc.sc_md6_tmo.tv_sec != 0 && timercmp(&now, &sc.sc_md6_tmo, >)) {
+-            carp_master_down(&sc);
+-        }
+-#endif
+-        if (sc.sc_ad_tmo.tv_sec != 0 && timercmp(&now, &sc.sc_ad_tmo, >)) {
+-            carp_send_ad(&sc);
+-        }
++	    struct timeval sel_tv;
++	    fds = rfds;
++
++	    switch (sc.sc_state) {
++		    case MASTER:
++			    sel_tv.tv_sec = sc.sc_ad_tmo.tv_sec - now.tv_sec;
++			    sel_tv.tv_usec = sc.sc_ad_tmo.tv_usec - now.tv_usec;
++			    break;
++		    case BACKUP:
++			    sel_tv.tv_sec = sc.sc_md_tmo.tv_sec - now.tv_sec;
++			    sel_tv.tv_usec = sc.sc_md_tmo.tv_usec - now.tv_usec;
++			    break;
++		    default:
++			    logfile(LOG_ERR, "sc_state is invalid");
++			    return 1;
++	    }
++
++	    tv_fix_usec_underrun(&sel_tv);
++	    nfds = select(mcast_fd+1, &fds, NULL, NULL, &sel_tv);
++	    if (nfds < 0) {
++		    logfile(LOG_ERR, "select() failed: %s", strerror(errno));
++		    return 1;
++	    }
++	    gettimeofday(&now, NULL);
++	    if (nfds == 1) {
++		    packethandler(mcast_fd);
++		    continue;
++	    }
++	    switch (sc.sc_state) {
++		    case MASTER:
++			    carp_send_ad(&sc);
++			    break;
++		    case BACKUP:
++			    carp_master_down(&sc);
++			    break;
++		    default:
++			    logfile(LOG_ERR, "sc_state is invalid");
++			    return 1;
++	    }
      }
 -    pcap_close(dev_desc);
 -    pcap_freecode(&bpfp);
