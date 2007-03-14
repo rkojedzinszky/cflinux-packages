@@ -18,7 +18,7 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
  fi
  
 --- ucarp-1.2.orig/src/carp.c	2006-02-19 00:06:17.000000000 +0100
-+++ ucarp-1.2/src/carp.c	2007-03-12 23:30:23.000000000 +0100
++++ ucarp-1.2/src/carp.c	2007-03-14 19:52:17.000000000 +0100
 @@ -48,6 +48,22 @@
  # include <dmalloc.h>
  #endif
@@ -190,7 +190,7 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
  
      sc.sc_vhid = vhid;
      sc.sc_advbase = advbase;
-@@ -674,23 +684,45 @@
+@@ -674,23 +684,53 @@
              (unsigned int) hwaddr[0], (unsigned int) hwaddr[1],
              (unsigned int) hwaddr[2], (unsigned int) hwaddr[3],
              (unsigned int) hwaddr[4], (unsigned int) hwaddr[5]);
@@ -230,11 +230,19 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
 +    }
 +
 +    mcast_fd = socket(PF_INET, SOCK_RAW, IPPROTO_VRRP);
++    if (fcntl(mcast_fd, F_SETFD, FD_CLOEXEC) == -1) {
++	    logfile(LOG_ERR, _("fcntl(FD_CLOEXEC): %s"), strerror(errno));
++	    return 1;
++    }
 +    mreq.imr_multiaddr.s_addr = INADDR_CARP_GROUP;
-+    mreq.imr_address.s_addr = INADDR_ANY;
++    mreq.imr_address.s_addr = srcip.s_addr;
 +    mreq.imr_ifindex = ifr.ifr_ifindex;
 +    if (setsockopt(mcast_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == -1) {
-+	    logfile(LOG_ERR, _("setsockopt() error"));
++	    logfile(LOG_ERR, _("setsockopt(IP_ADD_MEMBERSHIP): %s"), strerror(errno));
++	    return -1;
++    }
++    if (setsockopt(mcast_fd, SOL_SOCKET, SO_BINDTODEVICE, interface, strlen(interface)+1) == -1) {
++	    logfile(LOG_ERR, _("setsockopt(SO_BINDTODEVICE): %s"), strerror(errno));
 +	    return -1;
      }
 -    pcap_setfilter(dev_desc, &bpfp);
@@ -251,7 +259,7 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
      if (shutdown_at_exit != 0) {
          (void) signal(SIGINT, sighandler_exit);
          (void) signal(SIGQUIT, sighandler_exit);
-@@ -704,36 +736,46 @@
+@@ -704,36 +744,44 @@
      carp_setrun(&sc, 0); 
      
      for (;;) {
@@ -287,39 +295,37 @@ diff -ruNP ucarp-1.2.orig/configure ucarp-1.2/configure
 +
 +	    switch (sc.sc_state) {
 +		    case MASTER:
-+			    sel_tv.tv_sec = sc.sc_ad_tmo.tv_sec - now.tv_sec;
-+			    sel_tv.tv_usec = sc.sc_ad_tmo.tv_usec - now.tv_usec;
++			    if (timercmp(&sc.sc_ad_tmo, &now, <=)) {
++				    carp_send_ad(&sc);
++				    continue; // restart loop
++			    }
++			    sel_tv = sc.sc_ad_tmo;
 +			    break;
 +		    case BACKUP:
-+			    sel_tv.tv_sec = sc.sc_md_tmo.tv_sec - now.tv_sec;
-+			    sel_tv.tv_usec = sc.sc_md_tmo.tv_usec - now.tv_usec;
++			    if (timercmp(&sc.sc_md_tmo, &now, <=)) {
++				    carp_master_down(&sc);
++				    continue; // restart loop
++			    }
++			    sel_tv = sc.sc_md_tmo;
 +			    break;
 +		    default:
 +			    logfile(LOG_ERR, "sc_state is invalid");
 +			    return 1;
 +	    }
 +
++	    sel_tv.tv_sec -= now.tv_sec;
++	    sel_tv.tv_usec -= now.tv_usec;
 +	    tv_fix_usec_underrun(&sel_tv);
++
 +	    nfds = select(mcast_fd+1, &fds, NULL, NULL, &sel_tv);
++	    gettimeofday(&now, NULL);
++
 +	    if (nfds < 0) {
 +		    logfile(LOG_ERR, "select() failed: %s", strerror(errno));
 +		    return 1;
 +	    }
-+	    gettimeofday(&now, NULL);
 +	    if (nfds == 1) {
 +		    packethandler(mcast_fd);
-+		    continue;
-+	    }
-+	    switch (sc.sc_state) {
-+		    case MASTER:
-+			    carp_send_ad(&sc);
-+			    break;
-+		    case BACKUP:
-+			    carp_master_down(&sc);
-+			    break;
-+		    default:
-+			    logfile(LOG_ERR, "sc_state is invalid");
-+			    return 1;
 +	    }
      }
 -    pcap_close(dev_desc);
