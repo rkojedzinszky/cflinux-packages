@@ -1,0 +1,11 @@
+
+Djbdns is installed on your system. Only dnscache can be
+started automatically (yet), by initializing the directory with
+
+$ dnscache-conf nobody nobody /usr/local/etc/dnscache 0.0.0.0
+
+and adding the following line to /etc/rc.conf:
+dnscache_enable="YES"
+
+Also check the files under /usr/local/etc/dnscache/root/ip/.
+
