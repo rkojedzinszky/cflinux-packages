@@ -19,7 +19,7 @@
 
 PKG := djbdns
 PKG_VERSION := 1.05
-PKG_VERSION_SUFF := p1
+PKG_VERSION_SUFF := p2
 SRC_FILENAME = $(PKG)-$(PKG_VERSION).tar.gz
 EXTRACTED_DIR = $(PKG)-$(PKG_VERSION)
 DOWNLOAD_SITES = http://cr.yp.to/djbdns \
