@@ -18,7 +18,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 PKG := bind
-PKG_VERSION := 9.3.4
+PKG_VERSION := 9.7.1-P2
 PKG_VERSION_SUFF :=
 SRC_FILENAME = $(PKG)-$(PKG_VERSION).tar.gz
 EXTRACTED_DIR = $(PKG)-$(PKG_VERSION)
@@ -28,8 +28,6 @@ DOWNLOAD_SITES = http://ftp.isc.org/isc/bind9/$(PKG_VERSION) \
 # where a compiled cflinux resides
 CFLINUX_ROOT = ../../cflinux
 
-LD_HACK = LD_LIBRARY_PATH=$(PKG_ROOT)/lib/isc/.libs:$(PKG_ROOT)/lib/isccc/.libs:$(PKG_ROOT)/isccfg/.libs:$${LD_LIBRARY_PATH}
-
 all: build
 
 include $(CFLINUX_ROOT)/cfpkg.mk
@@ -38,7 +36,8 @@ configure: patch $(CONFIGURED_STAMP)
 
 $(CONFIGURED_STAMP):
 	cd $(PKG_ROOT) && \
-		$(UC_PATH) ./configure \
+		$(UC_PATH) BUILD_CC=gcc ./configure \
+		--host=$(TARGET_HOST) \
 		--prefix=/usr/local \
 		--localstatedir=/var/run/bind \
 		--sysconfdir=/usr/local/etc/bind \
@@ -46,7 +45,8 @@ $(CONFIGURED_STAMP):
 		--disable-static \
 		--with-libtool \
 		--enable-threads \
-		--with-openssl=$(UC_ROOT)
+		--enable-epoll \
+		--with-randomdev=/dev/random
 	touch $(CONFIGURED_STAMP)
 
 clean:
@@ -57,13 +57,13 @@ clean:
 build: configure $(BUILT_STAMP)
 
 $(BUILT_STAMP):
-	$(LD_HACK) $(MAKE) -C $(PKG_ROOT) all $(UC_PATH)
+	$(MAKE) -C $(PKG_ROOT) all $(UC_PATH)
 	touch $(BUILT_STAMP)
 
 install: build $(PKG_INSTALL_DIR)
-	$(LD_HACK) $(MAKE) -C $(PKG_ROOT) \
+	$(MAKE) -C $(PKG_ROOT) \
 		install DESTDIR=$(PKG_INSTALL_DIR) $(UC_PATH)
-	rm -rf $(PKG_INSTALL_DIR)/usr/local/{include,man} $(PKG_INSTALL_DIR)/var
+	rm -rf $(PKG_INSTALL_DIR)/usr/local/include $(PKG_INSTALL_DIR)/usr/local/share $(PKG_INSTALL_DIR)/var
 	find $(PKG_INSTALL_DIR)/usr/local/lib -name '*.la' -print0 | xargs -r0 rm
 	-find $(PKG_INSTALL_DIR)/usr/local/{bin,sbin} -type f -print0 | xargs -r0 strip -s
 	-find $(PKG_INSTALL_DIR)/usr/local/lib -name '*.so' -print0 | xargs -r0 strip -s
