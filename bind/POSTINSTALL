@@ -4,8 +4,7 @@ grep -q "^/usr/local/lib$" /etc/ld.so.conf 2>/dev/null || echo "/usr/local/lib" 
 ldconfig
 
 if ! [ -f /usr/local/etc/bind/rndc.key ] ; then
-	rndc-confgen -a
-	chmod 640 /usr/local/etc/bind/rndc.key
+	rndc-confgen -a -u bind -r /dev/urandom
 fi
 
 chown -R root:bind /usr/local/etc/bind

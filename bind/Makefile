@@ -18,7 +18,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 PKG := bind
-PKG_VERSION := 9.7.1-P2
+PKG_VERSION := 9.8.1-P1
 PKG_VERSION_SUFF :=
 SRC_FILENAME = $(PKG)-$(PKG_VERSION).tar.gz
 EXTRACTED_DIR = $(PKG)-$(PKG_VERSION)
@@ -42,10 +42,10 @@ $(CONFIGURED_STAMP):
 		--localstatedir=/var/run/bind \
 		--sysconfdir=/usr/local/etc/bind \
 		--enable-shared \
-		--disable-static \
+		--enable-static \
 		--with-libtool \
-		--enable-threads \
 		--enable-epoll \
+		--with-gost=no \
 		--with-randomdev=/dev/random
 	touch $(CONFIGURED_STAMP)
 
@@ -65,11 +65,12 @@ install: build $(PKG_INSTALL_DIR)
 		install DESTDIR=$(PKG_INSTALL_DIR) $(UC_PATH)
 	rm -rf $(PKG_INSTALL_DIR)/usr/local/include $(PKG_INSTALL_DIR)/usr/local/share $(PKG_INSTALL_DIR)/var
 	find $(PKG_INSTALL_DIR)/usr/local/lib -name '*.la' -print0 | xargs -r0 rm
+	find $(PKG_INSTALL_DIR)/usr/local/lib -name '*.a' -print0 | xargs -r0 rm
 	-find $(PKG_INSTALL_DIR)/usr/local/{bin,sbin} -type f -print0 | xargs -r0 strip -s
 	-find $(PKG_INSTALL_DIR)/usr/local/lib -name '*.so' -print0 | xargs -r0 strip -s
 
-	install -o 0 -g 0 -m 750 -d $(PKG_INSTALL_DIR)/usr/local/etc/bind
-	install -o 0 -g 0 -m 640 named.conf.sample db.root db.local db.0 db.127 db.255 $(PKG_INSTALL_DIR)/usr/local/etc/bind/
+	install -m 750 -d $(PKG_INSTALL_DIR)/usr/local/etc/bind
+	install -m 640 named.conf.sample db.root db.local db.0 db.127 db.255 $(PKG_INSTALL_DIR)/usr/local/etc/bind/
 
 permissions: defaultperms
 
