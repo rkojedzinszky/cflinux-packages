@@ -18,12 +18,15 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 PKG := bind
-PKG_VERSION := 9.8.1-P1
+PKG_VERSION := 9.9.5
 PKG_VERSION_SUFF :=
 SRC_FILENAME = $(PKG)-$(PKG_VERSION).tar.gz
 EXTRACTED_DIR = $(PKG)-$(PKG_VERSION)
 DOWNLOAD_SITES = http://ftp.isc.org/isc/bind9/$(PKG_VERSION) \
 		 $(CFLINUX_PACKAGES)
+
+PATCHES = bind.bin.Makefile.in.patch bind.lib.dns.openssl_link.c
+
 
 # where a compiled cflinux resides
 CFLINUX_ROOT = ../../cflinux
@@ -46,7 +49,9 @@ $(CONFIGURED_STAMP):
 		--with-libtool \
 		--enable-epoll \
 		--with-gost=no \
-		--with-randomdev=/dev/random
+		--with-ecdsa=yes \
+		--with-randomdev=/dev/random \
+		--with-gssapi=no
 	touch $(CONFIGURED_STAMP)
 
 clean:
